@@ -101,6 +101,7 @@ def test_timestamp_timezone_event_processed(client):
                        "short_sha": "279484c0",
                        "status_changed_at": "2021-04-28 21:50:00 +0200",
                        "deployment_id": 15,
+                       "environment": "Production",
                        }).encode("utf-8")
 
     pubsub_msg = {
@@ -132,3 +133,44 @@ def test_timestamp_timezone_event_processed(client):
 
     shared.insert_row_into_bigquery.assert_called_with(event)
     assert r.status_code == 204
+
+def test_ignore_non_production_environment_event(client):
+    headers = {"X-Gitlab-Event": "deployment", "X-Gitlab-Token": "foo"}
+    data = json.dumps({"object_kind": "deployment",
+                       "short_sha": "279484c0",
+                       "status_changed_at": "2021-04-28 21:50:00 +0200",
+                       "deployment_id": 15,
+                       "environment": "development",
+                       }).encode("utf-8")
+
+    pubsub_msg = {
+        "message": {
+            "data": base64.b64encode(data).decode("utf-8"),
+            "attributes": {"headers": json.dumps(headers)},
+            "message_id": "foobar",
+            "publishTime": 1,
+        },
+    }
+
+    event = {
+        "event_type": "deployment",
+        "id": 15,
+        "metadata": data.decode(),
+        "time_created": "2021-04-28 21:50:00",
+        "signature": shared.create_unique_id(pubsub_msg["message"]),
+        "msg_id": "foobar",
+        "source": "gitlab",
+    }
+
+    shared.insert_row_into_bigquery = mock.MagicMock()
+
+    r = client.post(
+        "/",
+        data=json.dumps(pubsub_msg),
+        headers={"Content-Type": "application/json"},
+    )
+
+    shared.insert_row_into_bigquery.assert_not_called()
+    assert r.status_code == 204
+
+

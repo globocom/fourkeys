@@ -19,7 +19,9 @@ WITH deploys_cloudbuild_github_gitlab AS (# Cloud Build, Github, Gitlab pipeline
       CASE WHEN source LIKE "github%" THEN ARRAY(
                 SELECT JSON_EXTRACT_SCALAR(string_element, '$')
                 FROM UNNEST(JSON_EXTRACT_ARRAY(metadata, '$.deployment.additional_sha')) AS string_element)
-           ELSE ARRAY<string>[] end as additional_commits
+           ELSE ARRAY<string>[] end as additional_commits,
+      JSON_EXTRACT_SCALAR(metadata, '$.project.id') as project_id,    
+      JSON_EXTRACT_SCALAR(metadata, '$.environment') as environment
       FROM four_keys.events_raw 
       WHERE (
       # Cloud Build Deployments
@@ -33,6 +35,7 @@ WITH deploys_cloudbuild_github_gitlab AS (# Cloud Build, Github, Gitlab pipeline
       # ArgoCD Deployments
       OR (source = "argocd" AND JSON_EXTRACT_SCALAR(metadata, '$.status') = "SUCCESS")
       )
+      AND JSON_EXTRACT_SCALAR(metadata, '$.environment') like "%prod%"
     ),
     deploys_tekton AS (# Tekton Pipelines
       SELECT
