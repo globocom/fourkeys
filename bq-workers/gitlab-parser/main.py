@@ -16,14 +16,11 @@ import base64
 from datetime import datetime
 import os
 import json
-
 import shared
-import logging
 
 from flask import Flask, request
 
 app = Flask(__name__)
-
 
 @app.route("/", methods=["POST"])
 def index():
@@ -58,12 +55,8 @@ def index():
             if "X-Gitlab-Event" in headers:
                 event = process_gitlab_event(headers, msg)
 
-        if metadata["object_kind"] == "deployment":
-            if check_if_is_prod_environment(metadata):
-                shared.insert_row_into_bigquery(event)
-        else:
+        if check_if_can_save_the_event(metadata):
             shared.insert_row_into_bigquery(event)
-
 
     except Exception as e:
         entry = {
@@ -153,9 +146,17 @@ def process_gitlab_event(headers, msg):
 
     return gitlab_event
 
+def check_if_can_save_the_event(metadata):
+    deploy_envs = os.getenv("DEPLOYMENT_ENVIRONMENTS")
 
-def check_if_is_prod_environment(metadata):
-    return "prod" in metadata["environment"].lower()
+    if deploy_envs is None or metadata["object_kind"] != "deployment":
+        return True
+
+    for env in deploy_envs.split(","):
+        if env.lower() in metadata["environment"].lower():
+            return True
+    
+    return False
 
 def get_metadata(msg):
     return json.loads(base64.b64decode(msg["data"]).decode("utf-8").strip())

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import base64
 import json
 
@@ -134,13 +135,14 @@ def test_timestamp_timezone_event_processed(client):
     shared.insert_row_into_bigquery.assert_called_with(event)
     assert r.status_code == 204
 
-def test_ignore_non_production_environment_event(client):
+def test_ignore_unexpected_environment_event(client):
+    set_accept_deployment_environment("prod,dev")
     headers = {"X-Gitlab-Event": "deployment", "X-Gitlab-Token": "foo"}
     data = json.dumps({"object_kind": "deployment",
                        "short_sha": "279484c0",
                        "status_changed_at": "2021-04-28 21:50:00 +0200",
                        "deployment_id": 15,
-                       "environment": "development",
+                       "environment": "qa",
                        }).encode("utf-8")
 
     pubsub_msg = {
@@ -173,4 +175,6 @@ def test_ignore_non_production_environment_event(client):
     shared.insert_row_into_bigquery.assert_not_called()
     assert r.status_code == 204
 
+def set_accept_deployment_environment(value):
+    os.environ["DEPLOYMENT_ENVIRONMENTS"] = value
 

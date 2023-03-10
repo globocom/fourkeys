@@ -35,7 +35,6 @@ WITH deploys_cloudbuild_github_gitlab AS (# Cloud Build, Github, Gitlab pipeline
       # ArgoCD Deployments
       OR (source = "argocd" AND JSON_EXTRACT_SCALAR(metadata, '$.status') = "SUCCESS")
       )
-      AND JSON_EXTRACT_SCALAR(metadata, '$.environment') like "%prod%"
     ),
     deploys_tekton AS (# Tekton Pipelines
       SELECT
