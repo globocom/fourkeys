@@ -55,7 +55,7 @@ def index():
             if "X-Gitlab-Event" in headers:
                 event = process_gitlab_event(headers, msg)
 
-        if check_if_can_save_the_event(metadata):
+        if can_save_the_event(metadata):
             shared.insert_row_into_bigquery(event)
 
     except Exception as e:
@@ -146,7 +146,7 @@ def process_gitlab_event(headers, msg):
 
     return gitlab_event
 
-def check_if_can_save_the_event(metadata):
+def can_save_the_event(metadata):
     deploy_envs = os.getenv("DEPLOYMENT_ENVIRONMENTS")
 
     if deploy_envs is None or metadata["object_kind"] != "deployment":
