@@ -17,6 +17,11 @@
 # https://hub.docker.com/_/python
 FROM python:3.7
 
+# Allow configure deployment enviroments separated by comma (,) to filter events
+# Example: prod,prd,any
+# TODO: Fix to Terraform env
+ENV DEPLOYMENT_ENVIRONMENTS=prod
+
 # Allow statements and log messages to immediately appear in the Cloud Run logs
 ENV PYTHONUNBUFFERED True
 

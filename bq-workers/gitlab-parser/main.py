@@ -16,13 +16,11 @@ import base64
 from datetime import datetime
 import os
 import json
-
 import shared
 
 from flask import Flask, request
 
 app = Flask(__name__)
-
 
 @app.route("/", methods=["POST"])
 def index():
@@ -44,6 +42,8 @@ def index():
     if "attributes" not in msg:
         raise Exception("Missing pubsub attributes")
 
+    metadata = get_metadata(msg)
+
     try:
         attr = msg["attributes"]
 
@@ -55,15 +55,16 @@ def index():
             if "X-Gitlab-Event" in headers:
                 event = process_gitlab_event(headers, msg)
 
-        shared.insert_row_into_bigquery(event)
+        if can_save_the_event(metadata):
+            shared.insert_row_into_bigquery(event)
 
     except Exception as e:
         entry = {
-                "severity": "WARNING",
-                "msg": "Data not saved to BigQuery",
-                "errors": str(e),
-                "json_payload": envelope
-            }
+            "severity": "WARNING",
+            "msg": "Data not saved to BigQuery",
+            "errors": str(e),
+            "json_payload": envelope
+        }
         print(json.dumps(entry))
 
     return "", 204
@@ -82,7 +83,7 @@ def process_gitlab_event(headers, msg):
              "pipeline", "job", "deployment",
              "build"}
 
-    metadata = json.loads(base64.b64decode(msg["data"]).decode("utf-8").strip())
+    metadata = get_metadata(msg)
 
     event_type = metadata["object_kind"]
 
@@ -99,15 +100,15 @@ def process_gitlab_event(headers, msg):
         event_object = metadata["object_attributes"]
         e_id = event_object["id"]
         time_created = (
-            event_object.get("updated_at") or
-            event_object.get("finished_at") or
-            event_object.get("created_at"))
+                event_object.get("updated_at") or
+                event_object.get("finished_at") or
+                event_object.get("created_at"))
 
     if event_type in ("job"):
         e_id = metadata["build_id"]
         time_created = (
-            event_object.get("finished_at") or
-            event_object.get("started_at"))
+                event_object.get("finished_at") or
+                event_object.get("started_at"))
 
     if event_type in ("deployment"):
         e_id = metadata["deployment_id"]
@@ -116,9 +117,9 @@ def process_gitlab_event(headers, msg):
     if event_type in ("build"):
         e_id = metadata["build_id"]
         time_created = (
-            metadata.get("build_finished_at") or
-            metadata.get("build_started_at") or
-            metadata.get("build_created_at"))
+                metadata.get("build_finished_at") or
+                metadata.get("build_started_at") or
+                metadata.get("build_created_at"))
 
     # Some timestamps come in a format like "2021-04-28 21:50:00 +0200"
     # BigQuery does not accept this as a valid format
@@ -144,6 +145,21 @@ def process_gitlab_event(headers, msg):
     }
 
     return gitlab_event
+
+def can_save_the_event(metadata):
+    deploy_envs = os.getenv("DEPLOYMENT_ENVIRONMENTS")
+
+    if deploy_envs is None or metadata["object_kind"] != "deployment":
+        return True
+
+    for env in deploy_envs.split(","):
+        if env.lower() in metadata["environment"].lower():
+            return True
+    
+    return False
+
+def get_metadata(msg):
+    return json.loads(base64.b64decode(msg["data"]).decode("utf-8").strip())
 
 
 if __name__ == "__main__":
